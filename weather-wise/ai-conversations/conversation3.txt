@@ -1,0 +1,312 @@
+----------------------------------
+Tool: Claude 
+Date: 2025-01-27
+----------------------------------
+
+Me: Now I need to implement the data visualization functions. The assignment requires at least 2 different types of visualizations. I'm thinking of temperature trends and precipitation chances. Can you help me create these using matplotlib?
+
+AI: Absolutely! Data visualization is a great way to make weather data more accessible. Let me help you create both temperature trend and precipitation visualizations using matplotlib.
+
+For temperature trends, I suggest a line chart showing the temperature over multiple days. For precipitation, a bar chart showing the chance of rain would work well.
+
+Here's the implementation:
+
+```python
+import matplotlib.pyplot as plt
+from typing import Dict, Any
+
+def create_temperature_visualisation(weather_data: Dict[str, Any], output_type: str = 'display'):
+    """
+    Create visualisation of temperature data (line chart).
+    
+    Args:
+        weather_data (dict): The processed weather data
+        output_type (str): 'display' to show or 'figure' to return matplotlib Figure
+    
+    Returns:
+        matplotlib.figure.Figure if output_type == 'figure', else None (displays the plot).
+    """
+    forecast = weather_data.get("forecast", [])
+    if not forecast:
+        print("No forecast data available for temperature visualisation.")
+        return None
+
+    days = []
+    avg_temps = []
+    for i, d in enumerate(forecast):
+        label = d.get("date", f"Day {i+1}")
+        days.append(label)
+        try:
+            avg_temps.append(float(d.get("avgtempC", 0)))
+        except Exception:
+            # fallback try compute with max/min
+            try:
+                avg_temps.append((float(d.get("maxtempC", 0)) + float(d.get("mintempC", 0))) / 2)
+            except Exception:
+                avg_temps.append(0.0)
+
+    fig, ax = plt.subplots()
+    ax.plot(days, avg_temps, marker='o')
+    ax.set_title(f"Temperature Trend — {weather_data.get('location')}")
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Avg Temperature (°C)")
+    ax.grid(True)
+
+    plt.tight_layout()
+    if output_type == 'figure':
+        return fig
+    plt.show()
+    return None
+
+def create_precipitation_visualisation(weather_data: Dict[str, Any], output_type: str = 'display'):
+    """
+    Create visualisation of precipitation chance (bar chart).
+    
+    Args:
+        weather_data (dict): Processed weather data
+        output_type (str): 'display' or 'figure'
+    
+    Returns:
+        matplotlib.figure.Figure if requested, else displays
+    """
+    forecast = weather_data.get("forecast", [])
+    if not forecast:
+        print("No forecast data available for precipitation visualisation.")
+        return None
+
+    days = []
+    max_rain_chances = []
+    for i, d in enumerate(forecast):
+        label = d.get("date", f"Day {i+1}")
+        days.append(label)
+        # compute max hourly chance as representative
+        hourly = d.get("hourly", [])
+        if hourly:
+            try:
+                max_rc = max(int(h.get("chanceofrain", 0)) for h in hourly)
+            except Exception:
+                max_rc = 0
+        else:
+            max_rc = 0
+        max_rain_chances.append(max_rc)
+
+    fig, ax = plt.subplots()
+    ax.bar(days, max_rain_chances)
+    ax.set_title(f"Peak Chance of Rain — {weather_data.get('location')}")
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Chance of Rain (%)")
+    ax.set_ylim(0, 100)
+    ax.grid(axis='y')
+
+    plt.tight_layout()
+    if output_type == 'figure':
+        return fig
+    plt.show()
+    return None
+```
+
+These functions handle:
+- **Temperature visualization**: Line chart with markers showing temperature trends over days
+- **Precipitation visualization**: Bar chart showing peak rain chances for each day
+- **Error handling**: Graceful handling of missing or malformed data
+- **Flexible output**: Can either display directly or return figure objects
+- **Proper labeling**: Clear titles, axis labels, and grid lines
+
+The functions extract the relevant data from the weather_data dictionary and create clean, informative visualizations.
+
+Me: The visualizations look good! But I'm wondering about the data extraction. How do we handle cases where the weather data might have missing fields or different structures? Should we add more robust error handling?
+
+AI: Excellent point! Robust error handling is crucial for a production application. The current implementation has some basic error handling, but we can make it much more robust. Let me enhance the functions:
+
+```python
+def create_temperature_visualisation(weather_data: Dict[str, Any], output_type: str = 'display'):
+    """
+    Create visualisation of temperature data (line chart).
+    
+    Args:
+        weather_data (dict): The processed weather data
+        output_type (str): 'display' to show or 'figure' to return matplotlib Figure
+    
+    Returns:
+        matplotlib.figure.Figure if output_type == 'figure', else None (displays the plot).
+    """
+    forecast = weather_data.get("forecast", [])
+    if not forecast:
+        print("No forecast data available for temperature visualisation.")
+        return None
+
+    days = []
+    avg_temps = []
+    for i, d in enumerate(forecast):
+        # Handle missing date information
+        label = d.get("date", f"Day {i+1}")
+        days.append(label)
+        
+        # Try multiple approaches to get temperature
+        temp = None
+        try:
+            # First try: use avgtempC if available
+            temp = float(d.get("avgtempC", 0))
+            if temp == 0:  # If avgtempC is 0, it might be missing
+                raise ValueError("avgtempC is 0, trying fallback")
+        except (ValueError, TypeError):
+            try:
+                # Fallback: compute from max/min
+                max_temp = float(d.get("maxtempC", 0))
+                min_temp = float(d.get("mintempC", 0))
+                if max_temp > 0 and min_temp > 0:
+                    temp = (max_temp + min_temp) / 2
+                else:
+                    raise ValueError("Invalid max/min temps")
+            except (ValueError, TypeError):
+                # Final fallback: use first hourly temperature if available
+                hourly = d.get("hourly", [])
+                if hourly and len(hourly) > 0:
+                    try:
+                        temp = float(hourly[0].get("tempC", 0))
+                    except (ValueError, TypeError):
+                        temp = 0.0
+                else:
+                    temp = 0.0
+        
+        avg_temps.append(temp)
+
+    # Check if we have any valid temperature data
+    if not avg_temps or all(t == 0 for t in avg_temps):
+        print("No valid temperature data available for visualisation.")
+        return None
+
+    fig, ax = plt.subplots()
+    ax.plot(days, avg_temps, marker='o', linewidth=2, markersize=6)
+    ax.set_title(f"Temperature Trend — {weather_data.get('location', 'Unknown Location')}")
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Temperature (°C)")
+    ax.grid(True, alpha=0.3)
+    
+    # Rotate x-axis labels if they're long
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    
+    if output_type == 'figure':
+        return fig
+    plt.show()
+    return None
+```
+
+This enhanced version:
+- **Multiple fallback strategies** for temperature data
+- **Validation** of temperature values before plotting
+- **Better error messages** when data is completely missing
+- **Improved styling** with better line width and marker size
+- **Label rotation** for long date strings
+- **Location fallback** in case location is missing
+
+The same approach can be applied to the precipitation function. Would you like me to show the enhanced precipitation function as well?
+
+Me: Yes, please! I want to make sure both visualization functions are equally robust. The enhanced error handling approach you showed is exactly what I need.
+
+AI: Perfect! Here's the enhanced precipitation visualization function with the same robust error handling approach:
+
+```python
+def create_precipitation_visualisation(weather_data: Dict[str, Any], output_type: str = 'display'):
+    """
+    Create visualisation of precipitation chance (bar chart).
+    
+    Args:
+        weather_data (dict): Processed weather data
+        output_type (str): 'display' or 'figure'
+    
+    Returns:
+        matplotlib.figure.Figure if requested, else displays
+    """
+    forecast = weather_data.get("forecast", [])
+    if not forecast:
+        print("No forecast data available for precipitation visualisation.")
+        return None
+
+    days = []
+    rain_chances = []
+    
+    for i, d in enumerate(forecast):
+        # Handle missing date information
+        label = d.get("date", f"Day {i+1}")
+        days.append(label)
+        
+        # Try multiple approaches to get rain chance
+        rain_chance = 0
+        hourly = d.get("hourly", [])
+        
+        if hourly:
+            try:
+                # Strategy 1: Get max chance from all hourly entries
+                chances = []
+                for h in hourly:
+                    chance = h.get("chanceofrain", 0)
+                    try:
+                        chances.append(int(chance))
+                    except (ValueError, TypeError):
+                        continue
+                
+                if chances:
+                    rain_chance = max(chances)
+                else:
+                    # Strategy 2: Try alternative field names
+                    for h in hourly:
+                        for field in ["chanceofrain", "chance_of_rain", "rain_chance"]:
+                            chance = h.get(field, 0)
+                            try:
+                                rain_chance = max(rain_chance, int(chance))
+                            except (ValueError, TypeError):
+                                continue
+            except Exception:
+                rain_chance = 0
+        else:
+            # Strategy 3: Try day-level rain chance if no hourly data
+            try:
+                rain_chance = int(d.get("chanceofrain", 0))
+            except (ValueError, TypeError):
+                rain_chance = 0
+        
+        rain_chances.append(rain_chance)
+
+    # Check if we have any valid rain chance data
+    if not rain_chances or all(c == 0 for c in rain_chances):
+        print("No valid precipitation data available for visualisation.")
+        return None
+
+    fig, ax = plt.subplots()
+    bars = ax.bar(days, rain_chances, color='skyblue', alpha=0.7, edgecolor='navy')
+    ax.set_title(f"Peak Chance of Rain — {weather_data.get('location', 'Unknown Location')}")
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Chance of Rain (%)")
+    ax.set_ylim(0, 100)
+    ax.grid(axis='y', alpha=0.3)
+    
+    # Add value labels on top of bars
+    for bar, chance in zip(bars, rain_chances):
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width()/2., height + 1,
+                f'{chance}%', ha='center', va='bottom')
+    
+    # Rotate x-axis labels if they're long
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    
+    if output_type == 'figure':
+        return fig
+    plt.show()
+    return None
+```
+
+This enhanced version includes:
+- **Multiple data extraction strategies** for rain chances
+- **Fallback field names** in case the API structure changes
+- **Validation** of rain chance values
+- **Better visual styling** with colors and transparency
+- **Value labels** on top of bars for clarity
+- **Robust error handling** for missing or malformed data
+- **Consistent styling** with the temperature function
+
+Both visualization functions now handle edge cases gracefully and provide informative error messages when data is unavailable. This makes your application much more robust and user-friendly!
+
+Me: Excellent! The enhanced error handling and multiple fallback strategies make both visualization functions much more robust. I'm confident these will handle real-world data variations well. The visual improvements like value labels and better styling will also make the charts more professional and informative.
